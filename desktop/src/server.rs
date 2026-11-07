@@ -178,7 +178,7 @@ impl Session {
             if !self.notice_sent {
                 self.notice_sent = true;
                 self.notice(&format!("Pen problem on the PC: {e}"));
-            } else if self.pen_errors % 500 == 0 {
+            } else if self.pen_errors.is_multiple_of(500) {
                 log::warn(&format!("{e} ({} times)", self.pen_errors));
             }
         }

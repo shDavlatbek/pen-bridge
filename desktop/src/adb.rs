@@ -72,7 +72,7 @@ pub fn spawn(port: u16, explicit: Option<PathBuf>) {
             ticks += 1;
             let Some(path) = adb.clone() else {
                 // Look again every ~20 s in case the user adds adb while we run.
-                if ticks % 10 == 0 {
+                if ticks.is_multiple_of(10) {
                     adb = find_adb(explicit.clone());
                     if let Some(p) = &adb {
                         log::info(&format!("USB: found {}", p.display()));
@@ -113,7 +113,7 @@ pub fn spawn(port: u16, explicit: Option<PathBuf>) {
             warned_unauthorized.retain(|s| seen.contains(s));
 
             // Every ~10 s, check the rule still exists (another tool may have restarted adb).
-            if ticks % 5 == 0 {
+            if ticks.is_multiple_of(5) {
                 let spec = format!("tcp:{port}");
                 ready.retain(|serial| match run(&path, &["-s", serial, "reverse", "--list"]) {
                     Ok(o) => String::from_utf8_lossy(&o.stdout).contains(&spec),

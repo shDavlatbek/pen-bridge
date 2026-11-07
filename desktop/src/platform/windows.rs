@@ -56,18 +56,19 @@ impl Drop for PenDevice {
 pub struct WinInjector {
     pen: PenDevice,
     create_error: Option<u32>,
-    /// Some Windows builds reject POINTER_FLAG_PRIMARY on injected pens; we drop it after the first failure.
-    use_primary_flag: bool,
+    /// Which optional pointer flags to leave out (bit 0: PRIMARY, bit 1: FIRSTBUTTON).
+    /// If Windows rejects an event we try the other combinations and keep the one that works.
+    compat: u8,
 }
 
 impl WinInjector {
     pub fn new() -> Self {
         let dev = unsafe { CreateSyntheticPointerDevice(PT_PEN, 1, POINTER_FEEDBACK_DEFAULT) };
         let create_error = if dev.is_null() { Some(unsafe { GetLastError() }) } else { None };
-        Self { pen: PenDevice(dev), create_error, use_primary_flag: true }
+        Self { pen: PenDevice(dev), create_error, compat: 0 }
     }
 
-    fn inject(&self, ev: &PenEvent, with_primary: bool) -> Result<(), u32> {
+    fn inject(&self, ev: &PenEvent, compat: u8) -> Result<(), u32> {
         let (mut flags, change) = match ev.phase {
             PenPhase::Hover => (POINTER_FLAG_INRANGE | POINTER_FLAG_UPDATE, POINTER_CHANGE_NONE),
             PenPhase::Down => (
@@ -82,8 +83,11 @@ impl WinInjector {
             // An update without INRANGE takes the pen out of range.
             PenPhase::Leave => (POINTER_FLAG_UPDATE, POINTER_CHANGE_NONE),
         };
-        if with_primary {
+        if compat & 1 == 0 {
             flags |= POINTER_FLAG_PRIMARY;
+        }
+        if compat & 2 != 0 {
+            flags &= !POINTER_FLAG_FIRSTBUTTON;
         }
 
         let touching = matches!(ev.phase, PenPhase::Down | PenPhase::Move);
@@ -174,18 +178,18 @@ impl Injector for WinInjector {
         if self.pen.0.is_null() {
             return Err("virtual pen is not available".into());
         }
-        match self.inject(ev, self.use_primary_flag) {
-            Ok(()) => Ok(()),
-            Err(first) if self.use_primary_flag => match self.inject(ev, false) {
-                Ok(()) => {
-                    log::info("Pen: using compatibility mode (no PRIMARY flag).");
-                    self.use_primary_flag = false;
-                    Ok(())
-                }
-                Err(_) => Err(format!("pen injection failed (Windows error {first})")),
-            },
-            Err(code) => Err(format!("pen injection failed (Windows error {code})")),
+        let first = match self.inject(ev, self.compat) {
+            Ok(()) => return Ok(()),
+            Err(code) => code,
+        };
+        for compat in 0..4u8 {
+            if compat != self.compat && self.inject(ev, compat).is_ok() {
+                log::info(&format!("Pen: switched to compatibility mode {compat}."));
+                self.compat = compat;
+                return Ok(());
+            }
         }
+        Err(format!("pen injection failed (Windows error {first})"))
     }
 
     fn key_down(&mut self, combo: &KeyCombo) -> Result<(), String> {
