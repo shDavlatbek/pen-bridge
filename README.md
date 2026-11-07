@@ -13,6 +13,11 @@ a scroll dial. It's tuned for **Clip Studio Paint** and works with any app that 
 
 It connects by **USB cable** (lowest delay) or **Wi‑Fi** (no cable). It tries USB first.
 
+## Download
+
+Get both files from the **[latest release](https://github.com/shDavlatbek/pen-bridge/releases/latest)**:
+`PenBridge-0.1.0.apk` for the phone and `PenBridge.exe` for the PC.
+
 ---
 
 ## 1. Set up the PC (once)
